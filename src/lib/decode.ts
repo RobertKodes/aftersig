@@ -1,6 +1,6 @@
 import { compareIntent } from './intent'
 import { parseTransaction } from './parse'
-import { HopError, isNotFound, withHop, type HopProgress } from './rpc'
+import { HopError, fetchParsedTransaction, isNotFound, withHop, type HopProgress } from './rpc'
 import type { DecodeFailure, DecodeResult } from './types'
 import { isLikelySignature, trimSig } from './format'
 
@@ -35,10 +35,7 @@ export async function decodeSignature(
 
   try {
     const { value, rpc, hops } = await withHop(async (connection) => {
-      return connection.getParsedTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-        commitment: 'confirmed',
-      })
+      return fetchParsedTransaction(connection, signature)
     }, { onHop })
 
     if (!value) {

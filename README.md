@@ -41,7 +41,9 @@ See `.env.example`.
 
 ## RPC note
 
-`api.mainnet-beta.solana.com` often **403s browser Origins**. aftersig defaults to PublicNode, then hops on **403 / 429 / 502 / 503** through dRPC → Ankr → official mainnet last.
+`api.mainnet-beta.solana.com` often **403s browser Origins**. aftersig defaults to PublicNode, then hops on **403 / 429 / 502 / 503** through LeoRPC (free) → dRPC → official mainnet last.
+
+Many public nodes implement `getTransaction` + `jsonParsed` but **not** `getParsedTransaction`. We call the former so PublicNode actually returns a body.
 
 If every public node waves you off, wait a minute or pin `VITE_RPC_URL`. Sample grabs a recent successful signature from the System Program (falls back to the Token program) so you can smoke the decode path without hunting a sig.
 
