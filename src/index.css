@@ -534,6 +534,7 @@ pre {
   background: #100e0a;
   border: 1px solid var(--rule);
   overflow: auto;
+  max-height: 360px;
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.4;

@@ -5,7 +5,7 @@ import type {
 } from '@solana/web3.js'
 import { mergeErrors } from './errors'
 import { formatTokenAmount, lamportsToSol, shortKey } from './format'
-import { programLabel, COMPUTE_BUDGET } from './programs'
+import { COMPUTE_BUDGET, MEMO, programLabel } from './programs'
 import type {
   BalanceDelta,
   DecodedInstruction,
@@ -186,6 +186,22 @@ function decodeIx(
 
   const data = 'data' in ix && typeof ix.data === 'string' ? ix.data : null
   const nAccounts = 'accounts' in ix && Array.isArray(ix.accounts) ? ix.accounts.length : 0
+  const local =
+    data != null
+      ? decodeKnownRaw(programId, label, data)
+      : null
+  if (local) {
+    return {
+      index,
+      inner,
+      outerIndex,
+      programId,
+      programLabel: label,
+      type: local.type,
+      summary: local.summary,
+      parsed: local.parsed,
+    }
+  }
   return {
     index,
     inner,
@@ -196,6 +212,105 @@ function decodeIx(
     summary: `Unparsed call to ${label}${nAccounts ? ` · ${nAccounts} accounts` : ''}${data ? ` · data ${data.slice(0, 12)}${data.length > 12 ? '…' : ''}` : ''}`,
     parsed: null,
   }
+}
+
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+function decodeBase58(str: string): Uint8Array {
+  const bytes: number[] = [0]
+  for (const ch of str) {
+    const val = B58.indexOf(ch)
+    if (val < 0) return new Uint8Array()
+    let carry = val
+    for (let i = 0; i < bytes.length; i++) {
+      const n = bytes[i] * 58 + carry
+      bytes[i] = n & 255
+      carry = n >> 8
+    }
+    while (carry > 0) {
+      bytes.push(carry & 255)
+      carry >>= 8
+    }
+  }
+  let zeros = 0
+  for (const ch of str) {
+    if (ch === '1') zeros += 1
+    else break
+  }
+  const out = new Uint8Array(zeros + bytes.length)
+  for (let i = 0; i < bytes.length; i++) out[out.length - 1 - i] = bytes[i]
+  return out
+}
+
+function u32le(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset] |
+    (bytes[offset + 1] << 8) |
+    (bytes[offset + 2] << 16) |
+    (bytes[offset + 3] << 24)
+  ) >>> 0
+}
+
+function u64le(bytes: Uint8Array, offset: number): number {
+  const lo = u32le(bytes, offset)
+  const hi = u32le(bytes, offset + 4)
+  return hi * 0x1_0000_0000 + lo
+}
+
+function decodeKnownRaw(
+  programId: string,
+  label: string,
+  data: string,
+): { type: string; summary: string; parsed: unknown } | null {
+  if (programId === COMPUTE_BUDGET || label === 'Compute Budget') {
+    const bytes = decodeBase58(data)
+    if (bytes.length < 1) return null
+    const tag = bytes[0]
+    if (tag === 2 && bytes.length >= 5) {
+      const units = u32le(bytes, 1)
+      return {
+        type: 'setComputeUnitLimit',
+        summary: `Set compute unit limit to ${units.toLocaleString('en-US')}`,
+        parsed: { type: 'setComputeUnitLimit', info: { units } },
+      }
+    }
+    if (tag === 3 && bytes.length >= 9) {
+      const microLamports = u64le(bytes, 1)
+      return {
+        type: 'setComputeUnitPrice',
+        summary: `Set priority fee to ${microLamports.toLocaleString('en-US')} µ-lamports/CU`,
+        parsed: { type: 'setComputeUnitPrice', info: { microLamports } },
+      }
+    }
+    if (tag === 1 && bytes.length >= 5) {
+      const size = u32le(bytes, 1)
+      return {
+        type: 'requestHeapFrame',
+        summary: `Requested heap frame of ${size.toLocaleString('en-US')} bytes`,
+        parsed: { type: 'requestHeapFrame', info: { bytes: size } },
+      }
+    }
+    if (tag === 4 && bytes.length >= 5) {
+      const limit = u32le(bytes, 1)
+      return {
+        type: 'setLoadedAccountsDataSizeLimit',
+        summary: `Set loaded-accounts data size limit to ${limit.toLocaleString('en-US')}`,
+        parsed: { type: 'setLoadedAccountsDataSizeLimit', info: { accountsDataSizeLimit: limit } },
+      }
+    }
+  }
+  if (programId === MEMO || label.startsWith('Memo')) {
+    const bytes = decodeBase58(data)
+    if (bytes.length === 0) return null
+    const text = new TextDecoder().decode(bytes)
+    if (!/^[\x09\x0a\x0d\x20-\x7e\u00a0-\uffff]*$/.test(text)) return null
+    return {
+      type: 'memo',
+      summary: `Memo: ${text}`,
+      parsed: { type: 'memo', info: { memo: text } },
+    }
+  }
+  return null
 }
 
 function prettyProgramName(parsedName: string, programId: string): string {

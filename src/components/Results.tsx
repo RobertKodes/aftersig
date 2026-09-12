@@ -345,7 +345,10 @@ export function ResultView({ result }: { result: DecodeResult }) {
               download .json
             </button>
           </div>
-          <pre>{JSON.stringify(payload, null, 2)}</pre>
+          <details className="raw">
+            <summary>preview JSON</summary>
+            <pre>{JSON.stringify(payload, null, 2)}</pre>
+          </details>
         </div>
       </section>
     </>

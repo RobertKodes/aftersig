@@ -76,6 +76,16 @@ export async function decodeSignature(
       }
     }
     const message = err instanceof Error ? err.message : String(err)
+    if (/WrongSize|Invalid param/i.test(message)) {
+      return {
+        ok: false,
+        failure: {
+          kind: 'invalid',
+          message:
+            'That base58 does not decode to a 64-byte signature. Truncated, padded, or a typo.',
+        },
+      }
+    }
     return {
       ok: false,
       failure: {
