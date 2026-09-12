@@ -150,9 +150,6 @@ function firedRules(intent: string): Rule[] {
   if (ids.has('sol-transfer') || ids.has('token-transfer')) {
     return hit.filter((r) => r.id !== 'transfer')
   }
-  if (ids.has('jupiter') && ids.has('swap')) {
-    return hit.filter((r) => r.id !== 'jupiter')
-  }
   return hit
 }
 
